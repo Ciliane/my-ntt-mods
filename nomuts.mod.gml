@@ -4,3 +4,4 @@
 #define end_step
   instance_destroy();
   GameCont.skillpoints = 0;
+  GameCont.endpoits = 0;
