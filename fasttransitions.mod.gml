@@ -15,8 +15,10 @@
 
   chat_comp_add("ftloop", "<loop> sets the end loop, where FT will be disabled");
   chat_comp_add("fttipfont", "<font> sets the font to use for FT's tips");
+  chat_comp_add("ftcompat", "toggle improved mods compatibility");
 
   global.generating = false;
+  global.compat_buffered = false;
 
 #macro OPT global.options;
 #macro OPT_LOADED !is_undefined(global.options);
@@ -49,6 +51,13 @@
     OPT.tip_font = _arg;
     trace(`Fast Transitions tip font changed to ${_arg}.`);
     options_save();
+    return true;
+  }
+
+  if (_cmd == "ftcompat") {
+    OPT.compat = (!OPT.compat);
+    trace(`Compatibility mode ${OPT.compat ? "enabled" : "disabled"}.`);
+
     return true;
   }
 
@@ -127,8 +136,16 @@
   // end_step is slightly better timing to catch freshly created GenConts
   if (instance_exists(GenCont)) {
     if (!global.generating) {
-      global.generating = true;
-      generation_start();
+      if (!OPT.compat) {
+        global.generating = true;
+        generation_start();
+      } else if (global.compat_buffered) {
+        global.generating = true;
+        generation_start();
+        global.compat_buffered = false;
+      } else {
+        global.compat_buffered = true;
+      }
     }
   } else if (global.generating) {
     global.generating = false;
@@ -236,13 +253,19 @@
   wait file_load(OPT_FILE);
   if (file_exists(OPT_FILE)) {
     global.options = json_decode(string_load(OPT_FILE));
+    // New option, compatibility with old settings files
+    if ("compat" not in global.options) {
+      global.options.compat = false;
+    }
   } else {
     global.options = {
       end_loop: -1,
       tip_font: -1,
+      compat: false,
     };
     options_save();
   }
 
 #define options_save
   string_save(json_encode(global.options), OPT_FILE);
+
