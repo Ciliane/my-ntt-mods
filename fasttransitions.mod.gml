@@ -18,7 +18,8 @@
   chat_comp_add("ftcompat", "toggle improved mods compatibility");
 
   global.generating = false;
-  global.compat_buffered = false;
+  global.compat_buffer = 0;
+  global.compat_wait_time = 2;
 
 #macro OPT global.options;
 #macro OPT_LOADED !is_undefined(global.options);
@@ -69,11 +70,21 @@
     exit;
   }
 
+  var _headless = instances_matching_gt(Player, "bleed", 0);
+  var _do_skip_portal = (array_length(_headless) == 0);
+  if (_do_skip_portal) {
+    skip_portal();
+  }
+
+  script_bind_end_step(end_step, 0);
+
+#define skip_portal
   /*
-    This comment explains all of the black magic involved in this section
+    Explanation of some of the black magic going on here
 
     "endgame" is used as a countdown timer before the portal's animation moves
-    on to the next stage. It's always 100 if the portal hasn't been touched
+    on to the next stage. It's always 100 if the portal hasn't been touched,
+    then it starts ticking down
 
     Portals spawn a PortalClear and a PortalShock at the end of their spawning
     animation, which destroy walls and open chests respectively. In case the
@@ -84,7 +95,7 @@
     Once endgame becomes 0 or lower, portal will begin its closing animation. We
     set endgame to 0 and perform portal's step manually to begin the closing
     stage instantly. The level will end once the closing animation
-    finishes, which we will force by performing ev_animation_end eventually
+    finishes, which we will force by performing ev_animation_end at the end
 
     Rads only get collected by touching a portal if their speed is 0. This
     auto-collect also pulls weapons in, but only at range where portals would
@@ -128,8 +139,6 @@
     event_perform(ev_other, ev_animation_end);
   }
 
-  script_bind_end_step(end_step, 0);
-
 #define end_step
   instance_destroy();
 
@@ -139,12 +148,12 @@
       if (!OPT.compat) {
         global.generating = true;
         generation_start();
-      } else if (global.compat_buffered) {
+      } else if (global.compat_buffer >= global.compat_wait_time) {
         global.generating = true;
         generation_start();
-        global.compat_buffered = false;
+        global.compat_buffer = 0;
       } else {
-        global.compat_buffered = true;
+        global.compat_buffer += 1;
       }
     }
   } else if (global.generating) {
@@ -168,12 +177,14 @@
       }
     }
 
-    // GameCont's alarm0 creates the crown. Needs to be hurried up so that IDPD
-    // properly spawn on 1-1 L0, when starting with a crown
-    with (GameCont) {
-      if (alarm0 > -1) {
-        event_perform(ev_alarm, 0);
-        alarm0 = -1;
+    // GameCont's alarm0 creates the crown. If level generation ends too soon
+    // the alarm won't run in time
+    if (!OPT.compat) {
+      with (GameCont) {
+        if (alarm0 > -1) {
+          event_perform(ev_alarm, 0);
+          alarm0 = -1;
+        }
       }
     }
 
